@@ -145,3 +145,14 @@ def handle_webrtc_end(data):
 
     room = get_room_name(to_user, from_user)
     emit('webrtc_end', {}, room=room, include_self=False)
+
+@sio.on("video-call-offer")
+def handle_video_call_offer(data):
+    print(f"Received video call offer: {data}")
+    # Forward the offer to the intended recipient
+    sio.emit("video-call-offer", data, to=data["recipient_id"])
+
+@sio.on("ice-candidate")
+def handle_ice_candidate(data):
+    print(f"Received ICE candidate: {data}")
+    sio.emit("ice-candidate", data, to=data["recipient_id"])
