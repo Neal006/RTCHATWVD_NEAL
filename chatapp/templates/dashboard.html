@@ -412,10 +412,16 @@
         };
         peerConnection.createOffer().then(offer => {
           peerConnection.setLocalDescription(offer);
-          socket.emit('webrtc_offer', {offer, to: targetUser, from: username});
+          // Sending the offer
+          socket.emit("video-call-offer", { recipient_id: targetUser, offer: offer });
         });
       });
     }
+
+    // Receiving the offer
+    socket.on("video-call-offer", (data) => {
+      console.log("Received video call offer:", data);
+    });
 
     function endCall() {
       if (peerConnection) peerConnection.close();
@@ -449,4 +455,4 @@
     });
   </script>
 </body>
-</html> 
+</html>
