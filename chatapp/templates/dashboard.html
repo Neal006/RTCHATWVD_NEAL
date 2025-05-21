@@ -218,6 +218,19 @@
       margin-left: 6px;
       vertical-align: middle;
     }
+    #video-call {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    video {
+      width: 240px;
+      max-width: 100%;
+      border-radius: 10px;
+      background: #222;
+    }
   </style>
 </head>
 <body>
@@ -249,203 +262,232 @@
         <button type="submit">Send</button>
       </form>
     </div>
-    <div id="video-call" style="display:none; flex-direction:column; align-items:center;">
-      <video id="localVideo" autoplay muted playsinline style="width:200px; border-radius:8px; background:#222;"></video>
-      <video id="remoteVideo" autoplay playsinline style="width:200px; border-radius:8px; background:#222; margin-top:10px;"></video>
-      <button onclick="endCall()" style="margin-top:10px; background:#ef4444;">End Call</button>
+    <div id="video-call">
+      <video id="localVideo" autoplay muted playsinline></video>
+      <video id="remoteVideo" autoplay playsinline></video>
     </div>
   </div>
   <script>
-    const socket = io(window.location.origin);
-    socket.on('connect', () => {
-      const lastTarget = localStorage.getItem('lastTargetUser');
-      if (lastTarget) {
-        openChat(lastTarget);  
-      }
-    });
+const socket = io(window.location.origin);
+const username = "{{ username }}";
 
-    let room = '';
-    let targetUser = '';
-    const username = "{{ username }}";
-    let localStream, peerConnection;
-    const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-    
-    let currentRoom = '';
-    let previousRoom = '';
+let currentRoom = '';
+let previousRoom = '';
+let targetUser = '';
+let localStream, peerConnection;
+const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-    window.addEventListener('beforeunload', function() {
-      if (currentRoom) socket.emit('leave', { room: currentRoom });
-    });
-    socket.on('private_message', function(msg) {
-      if (
-        (msg.sender === targetUser && msg.receiver === username) ||
-        (msg.sender === username && msg.receiver === targetUser)
-      ) {
-        appendMessage(msg, msg.sender === username);
-        scrollMessagesToBottom();
-      } else {
-        showNotification(msg.sender);
-      }
-    });
-    function searchUsers() {
-      const query = document.getElementById('searchInput').value.trim();
-      if (!query) {
-        document.getElementById('results').innerHTML = '';
-        return;
-      }
-      fetch(`/search_users?query=${encodeURIComponent(query)}`)
-        .then(res => res.json())
-        .then(data => {
-          const results = document.getElementById('results');
-          results.innerHTML = '';
-          data.forEach(user => {
-            if (user !== username) {
-              const li = document.createElement('li');
-              li.innerHTML = `<a href="#" onclick="openChat('${user}')">${user}</a>`;
-              results.appendChild(li);
-            }
-          });
-        });
-    }
+const localVideo = document.getElementById("localVideo");
+const remoteVideo = document.getElementById("remoteVideo");
+const videoCallDiv = document.getElementById("video-call");
 
-    function showNotification(user) {
+// Join last chat
+socket.on('connect', () => {
+  const lastTarget = localStorage.getItem('lastTargetUser');
+  if (lastTarget) openChat(lastTarget);
+});
+
+window.addEventListener('beforeunload', () => {
+  if (currentRoom) socket.emit('leave', { room: currentRoom });
+});
+
+socket.on('private_message', (msg) => {
+  if (
+    (msg.sender === targetUser && msg.recipient === username) ||
+    (msg.sender === username && msg.recipient === targetUser)
+  ) {
+    displayMessage(msg);
+    scrollMessagesToBottom();
+  } else {
+    showNotification(msg.sender);
+  }
+});
+
+function searchUsers() {
+  const query = document.getElementById('searchInput').value.trim();
+  if (!query) return document.getElementById('results').innerHTML = '';
+
+  fetch(`/search_users?query=${encodeURIComponent(query)}`)
+    .then(res => res.json())
+    .then(data => {
       const results = document.getElementById('results');
-      const items = results.querySelectorAll('li a');
-      items.forEach(a => {
-        if (a.textContent === user && !a.querySelector('.notif-badge')) {
-          const badge = document.createElement('span');
-          badge.className = 'notif-badge';
-          badge.textContent = '•';
-          a.appendChild(badge);
+      results.innerHTML = '';
+      data.forEach(user => {
+        if (user !== username) {
+          const li = document.createElement('li');
+          li.innerHTML = `<a href="#" onclick="openChat('${user}')">${user}</a>`;
+          results.appendChild(li);
         }
       });
+    });
+}
+
+function showNotification(user) {
+  const results = document.getElementById('results');
+  const items = results.querySelectorAll('li a');
+  items.forEach(a => {
+    if (a.textContent === user && !a.querySelector('.notif-badge')) {
+      const badge = document.createElement('span');
+      badge.className = 'notif-badge';
+      badge.textContent = '•';
+      a.appendChild(badge);
     }
+  });
+}
 
-    function openChat(selectedUser) {
-      if (!selectedUser) return;
+function openChat(user) {
+  if (!user) return;
 
-      targetUser = selectedUser;
-      previousRoom = currentRoom;
-      currentRoom = [username, targetUser].sort().join('_');
-      room = currentRoom;
+  targetUser = user;
+  previousRoom = currentRoom;
+  currentRoom = [username, targetUser].sort().join('_');
 
-      document.getElementById('chat-title').innerText = `Chat with ${targetUser}`;
-      document.getElementById('messages').innerHTML = '';
+  document.getElementById('chat-title').innerText = `Chat with ${targetUser}`;
+  document.getElementById('messages').innerHTML = '';
 
-      // Remove notif badge
-      const results = document.getElementById('results');
-      const items = results.querySelectorAll('li a');
-      items.forEach(a => {
-        if (a.textContent === targetUser) {
-          const badge = a.querySelector('.notif-badge');
-          if (badge) badge.remove();
+  // Remove notif badge
+  document.querySelectorAll('li a').forEach(a => {
+    if (a.textContent === targetUser) {
+      const badge = a.querySelector('.notif-badge');
+      if (badge) badge.remove();
+    }
+  });
+
+  if (previousRoom && previousRoom !== currentRoom) {
+    socket.emit('leave', { room: previousRoom });
+  }
+
+  socket.emit('join', { room: currentRoom });
+  localStorage.setItem('lastTargetUser', user);
+  loadMessages(user);
+}
+
+function loadMessages(user) {
+  fetch(`/load_messages?target=${encodeURIComponent(user)}`)
+    .then(res => res.json())
+    .then(messages => {
+      const messagesList = document.getElementById('messages');
+      messagesList.innerHTML = '';
+      let lastDate = '';
+      messages.forEach(msg => {
+        const msgDate = msg.timestamp.split(' ')[0];
+        if (msgDate !== lastDate) {
+          insertDayDivider(new Date(msgDate).toLocaleDateString());
+          lastDate = msgDate;
         }
+        displayMessage(msg);
       });
-
-      if (previousRoom && previousRoom !== currentRoom) {
-        socket.emit('leave', { room: previousRoom });
-      }
-
-      socket.emit('join', { room: currentRoom });
-      localStorage.setItem('lastTargetUser', selectedUser);
-      loadMessages(targetUser);
-    }
-
-    function loadMessages(targetUser) {
-      fetch(`/load_messages?target=${encodeURIComponent(targetUser)}`)
-        .then(response => response.json())
-        .then(messages => {
-          const messagesList = document.getElementById('messages');
-          messagesList.innerHTML = '';
-          let lastDate = '';
-          messages.forEach(msg => {
-            const msgDate = msg.timestamp.split(' ')[0];
-            if (msgDate !== lastDate) {
-              insertDayDivider(new Date(msgDate).toLocaleDateString());
-              lastDate = msgDate;
-            }
-            appendMessage(msg, msg.sender === username);
-          });
-          scrollMessagesToBottom();
-        });
-    }
-
-    function sendMessage() {
-      const messageInput = document.getElementById('msg_input');
-      const message = messageInput.value.trim();
-      if (!message || !room) return;
-
-      socket.emit('private_message', {
-        sender: username,
-        receiver: targetUser,
-        message: message
-      });
-
-      messageInput.value = '';
       scrollMessagesToBottom();
-    }
-
-    function scrollMessagesToBottom() {
-      const messages = document.getElementById('messages');
-      messages.scrollTop = messages.scrollHeight;
-    }
-
-    function logout() {
-      window.location.href = "/logout";
-    }
-
-    function startCall() {
-      if (!targetUser) return alert("Select a user to call!");
-      if (!navigator.mediaDevices) return alert("Browser doesn't support video call");
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
-        localStream = stream;
-        document.getElementById('localVideo').srcObject = stream;
-        document.getElementById('video-call').style.display = 'flex';
-        peerConnection = new RTCPeerConnection(config);
-        stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
-        peerConnection.onicecandidate = ({candidate}) => {
-          if (candidate) socket.emit('webrtc_ice', {candidate, to: targetUser, from: username});
-        };
-        peerConnection.ontrack = ({streams: [remoteStream]}) => {
-          document.getElementById('remoteVideo').srcObject = remoteStream;
-        };
-        peerConnection.createOffer().then(offer => {
-          peerConnection.setLocalDescription(offer);
-          socket.emit('webrtc_offer', {offer, to: targetUser, from: username});
-        });
-      });
-    }
-
-    function endCall() {
-      if (peerConnection) peerConnection.close();
-      if (localStream) localStream.getTracks().forEach(track => track.stop());
-      document.getElementById('video-call').style.display = 'none';
-      document.getElementById('remoteVideo').srcObject = null;
-      document.getElementById('localVideo').srcObject = null;
-      socket.emit('webrtc_end', {to: targetUser, from: username});
-    }
-
-    function insertDayDivider(dateStr) {
-      const divider = document.createElement('li');
-      divider.className = 'day-divider';
-      divider.textContent = dateStr;
-      document.getElementById('messages').appendChild(divider);
-    }
-    let selectedMsg = null;
-
-    function appendMessage(msg, isOwn) {
-      const li = document.createElement('li');
-      li.className = isOwn ? 'own-message' : 'other-message';
-      let time = msg.timestamp?.split(' ')[1]?.slice(0,5) || new Date().toTimeString().slice(0,5);
-      li.innerHTML = `<div class="msg-content">${msg.sender}: ${msg.content}</div><div class="msg-meta">${time}</div>`;
-      document.getElementById('messages').appendChild(li);
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-      searchUsers();
-      // const lastTarget = localStorage.getItem('lastTargetUser');
-      // if (lastTarget) openChat(lastTarget);
     });
-  </script>
+}
+
+function sendMessage() {
+  const input = document.getElementById('msg_input');
+  const text = input.value.trim();
+  if (!text || !currentRoom) return;
+
+  const msg = {
+    room: currentRoom,
+    sender: username,
+    recipient: targetUser,
+    text,
+    timestamp: new Date().toLocaleString()
+  };
+
+  socket.emit('private_message', msg);
+  displayMessage(msg);
+  input.value = '';
+}
+
+function displayMessage(msg) {
+  const li = document.createElement('li');
+  li.className = msg.sender === username ? 'own-message' : 'other-message';
+  li.innerHTML = `${msg.text} <span class="msg-meta">${msg.timestamp}</span>`;
+  document.getElementById('messages').appendChild(li);
+}
+
+function insertDayDivider(dateText) {
+  const divider = document.createElement('li');
+  divider.className = 'day-divider';
+  divider.textContent = dateText;
+  document.getElementById('messages').appendChild(divider);
+}
+
+function scrollMessagesToBottom() {
+  const messages = document.getElementById('messages');
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function logout() {
+  localStorage.clear();
+  window.location.href = '/logout';
+}
+
+// WebRTC Calling
+async function startCall() {
+  if (!targetUser) return alert("Select a user to call!");
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localVideo.srcObject = localStream;
+    videoCallDiv.style.display = "flex";
+
+    peerConnection = new RTCPeerConnection(config);
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+    peerConnection.onicecandidate = ({ candidate }) => {
+      if (candidate) socket.emit('ice-candidate', { candidate, room: currentRoom });
+    };
+
+    peerConnection.ontrack = (event) => {
+      remoteVideo.srcObject = event.streams[0];
+    };
+
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+
+    socket.emit('video-offer', { offer, room: currentRoom });
+
+  } catch (err) {
+    alert("Error starting call: " + err.message);
+  }
+}
+
+socket.on('video-offer', async ({ offer }) => {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localVideo.srcObject = localStream;
+    videoCallDiv.style.display = "flex";
+
+    peerConnection = new RTCPeerConnection(config);
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+    peerConnection.ontrack = (event) => {
+      remoteVideo.srcObject = event.streams[0];
+    };
+
+    peerConnection.onicecandidate = ({ candidate }) => {
+      if (candidate) socket.emit('ice-candidate', { candidate, room: currentRoom });
+    };
+
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+
+    socket.emit('video-answer', { answer, room: currentRoom });
+
+  } catch (err) {
+    alert("Error answering call: " + err.message);
+  }
+});
+
+socket.on('video-answer', async ({ answer }) => {
+  await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+});
+
+socket.on('ice-candidate', ({ candidate }) => {
+  peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+});
+</script>
+
 </body>
 </html> 
