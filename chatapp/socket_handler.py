@@ -85,7 +85,6 @@ def handle_private_message(data):
 
     room = get_room_name(sender, receiver)
 
-    # Save message to DB
     msg = Message(room=room, sender=sender, receiver=receiver, content=message)
     db.session.add(msg)
     db.session.commit()
@@ -96,63 +95,3 @@ def handle_private_message(data):
         'content': message,
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     }, room=room)
-
-# ----- WebRTC Signaling -----
-
-@sio.on('webrtc_offer')
-def handle_webrtc_offer(data):
-    to_user = data.get('to')
-    from_user = data.get('from')
-    offer = data.get('offer')
-
-    if not all([to_user, from_user, offer]):
-        return emit('error', {'error': 'Missing fields in WebRTC offer'})
-
-    room = get_room_name(to_user, from_user)
-    emit('webrtc_offer', {'offer': offer, 'from': from_user}, room=room, include_self=False)
-
-@sio.on('webrtc_answer')
-def handle_webrtc_answer(data):
-    to_user = data.get('to')
-    from_user = data.get('from')
-    answer = data.get('answer')
-
-    if not all([to_user, from_user, answer]):
-        return emit('error', {'error': 'Missing fields in WebRTC answer'})
-
-    room = get_room_name(to_user, from_user)
-    emit('webrtc_answer', {'answer': answer, 'from': from_user}, room=room, include_self=False)
-
-@sio.on('webrtc_ice')
-def handle_webrtc_ice(data):
-    to_user = data.get('to')
-    from_user = data.get('from')
-    candidate = data.get('candidate')
-
-    if not all([to_user, from_user, candidate]):
-        return emit('error', {'error': 'Missing fields in WebRTC ICE'})
-
-    room = get_room_name(to_user, from_user)
-    emit('webrtc_ice', {'candidate': candidate, 'from': from_user}, room=room, include_self=False)
-
-@sio.on('webrtc_end')
-def handle_webrtc_end(data):
-    to_user = data.get('to')
-    from_user = data.get('from')
-
-    if not all([to_user, from_user]):
-        return emit('error', {'error': 'Missing fields in WebRTC end'})
-
-    room = get_room_name(to_user, from_user)
-    emit('webrtc_end', {}, room=room, include_self=False)
-
-@sio.on("video-call-offer")
-def handle_video_call_offer(data):
-    print(f"Received video call offer: {data}")
-    # Forward the offer to the intended recipient
-    sio.emit("video-call-offer", data, to=data["recipient_id"])
-
-@sio.on("ice-candidate")
-def handle_ice_candidate(data):
-    print(f"Received ICE candidate: {data}")
-    sio.emit("ice-candidate", data, to=data["recipient_id"])
