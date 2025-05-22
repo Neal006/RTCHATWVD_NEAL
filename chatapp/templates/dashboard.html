@@ -553,7 +553,15 @@
       peerConnection = new RTCPeerConnection(configuration);
       
       peerConnection.ontrack = event => {
-        document.getElementById('remote-video').srcObject = event.streams[0];
+        const remoteVideo = document.getElementById('remote-video');
+        if (event.streams && event.streams[0]) {
+          if (remoteVideo.srcObject !== event.streams[0]) {
+            remoteVideo.srcObject = event.streams[0];
+            console.log('Remote stream set:', event.streams[0]);
+          }
+        } else {
+          console.warn('No remote stream in ontrack event:', event);
+        }
       };
       
       peerConnection.onicecandidate = event => {
@@ -595,6 +603,7 @@
       createPeerConnection();
       localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
       document.getElementById('local-video').srcObject = localStream;
+      console.log('Local stream set:', localStream);
 
       const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(offer);
@@ -615,6 +624,7 @@
       }
       if (peerConnection) {
         peerConnection.close();
+        peerConnection = null;
       }
       isCallActive = false;
     }
@@ -651,6 +661,7 @@
       createPeerConnection();
       localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
       document.getElementById('local-video').srcObject = localStream;
+      console.log('Local stream set:', localStream);
       socket.emit('call_accepted', { room: currentRoom });
     }
 
@@ -672,6 +683,7 @@
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         document.getElementById('local-video').srcObject = localStream;
+        console.log('Local stream set:', localStream);
         createPeerConnection();
       } catch (error) {
         console.error('Error accepting call:', error);
@@ -685,7 +697,7 @@
     });
 
     socket.on('offer', async data => {
-      if (!isCaller) {
+      if (!isCaller && isPeerConnectionActive()) {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
         // Add any buffered ICE candidates
         remoteCandidates.forEach(candidate => peerConnection.addIceCandidate(candidate));
@@ -697,7 +709,7 @@
     });
 
     socket.on('answer', async data => {
-      if (isCaller && peerConnection.signalingState === 'have-local-offer') {
+      if (isCaller && isPeerConnectionActive() && peerConnection.signalingState === 'have-local-offer') {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
         // Add any buffered ICE candidates
         remoteCandidates.forEach(candidate => peerConnection.addIceCandidate(candidate));
@@ -707,9 +719,9 @@
 
     socket.on('ice_candidate', async data => {
       const candidate = new RTCIceCandidate(data.candidate);
-      if (peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
+      if (isPeerConnectionActive() && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
         await peerConnection.addIceCandidate(candidate);
-      } else {
+      } else if (isPeerConnectionActive()) {
         remoteCandidates.push(candidate);
       }
     });
@@ -717,6 +729,10 @@
     socket.on('call_ended', () => {
       hideVideoContainer();
     });
+
+    function isPeerConnectionActive() {
+      return peerConnection && peerConnection.signalingState !== 'closed';
+    }
   </script>
 </body>
 </html>
