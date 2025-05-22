@@ -546,6 +546,7 @@
     let isCallActive = false;
     let isMuted = false;
     let isVideoOff = false;
+    let isCaller = false;
 
     function createPeerConnection() {
       peerConnection = new RTCPeerConnection(configuration);
@@ -609,6 +610,7 @@
     }
 
     async function startCall() {
+      isCaller = true;
       if (!targetUser) {
         alert('Please select a user to call');
         return;
@@ -721,6 +723,7 @@
 
     // Socket event handlers for video calls
     socket.on('incoming_call', data => {
+      isCaller = false;
       if (data.caller !== username) {
         document.getElementById('caller-name').textContent = data.caller;
         document.getElementById('call-modal').style.display = 'block';
@@ -744,17 +747,17 @@
     });
 
     socket.on('offer', async data => {
-      if (!peerConnection) {
-        createPeerConnection();
-      }
+      if (!peerConnection) createPeerConnection();
       try {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        socket.emit('answer', {
-          room: currentRoom,
-          answer: answer
-        });
+        if (!isCaller) {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+          const answer = await peerConnection.createAnswer();
+          await peerConnection.setLocalDescription(answer);
+          socket.emit('answer', {
+            room: currentRoom,
+            answer: answer
+          });
+        }
       } catch (error) {
         console.error('Error handling offer:', error);
       }
@@ -762,7 +765,9 @@
 
     socket.on('answer', async data => {
       try {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        if (isCaller && peerConnection.signalingState === 'have-local-offer') {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        }
       } catch (error) {
         console.error('Error handling answer:', error);
       }
