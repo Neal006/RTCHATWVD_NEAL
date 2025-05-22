@@ -28,21 +28,7 @@
       margin-bottom: 10px;
       font-weight: 600;
     }
-    #searchInput {
-      background-color: #334155;
-      color: white;
-      padding-left: 36px;
-      background-image: url('data:image/svg+xml;utf8,<svg fill="gray" height="18" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>');
-      background-repeat: no-repeat;
-      background-position: 10px center;
-      border: none;
-      border-radius: 6px;
-      outline: none;
-      transition: box-shadow 0.2s;
-    }
-    #searchInput:focus {
-      box-shadow: 0 0 0 2px #38bdf8;
-    }
+    
     #results {
       list-style: none;
       padding-left: 0;
@@ -218,6 +204,26 @@
       margin-left: 6px;
       vertical-align: middle;
     }
+    .search-container {
+      padding: 15px;
+      border-bottom: 1px solid #dbdbdb;
+    }
+    .search-bar {
+        width: 100%;
+        padding: 10px 15px;
+        border: 1px solid #dbdbdb;
+        border-radius: 400px;
+        background-color: var(--bg-secondary);
+        color: var(--text-primary);
+        font-size: 14px;
+        transition: all 0.3s ease;
+    }
+
+    .search-bar:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.1);
+    }
     
   </style>
 </head>
@@ -225,13 +231,9 @@
 
   <div id="user-panel">
     <h3>Search Users</h3>
-    <input
-      type="text"
-      id="searchInput"
-      onkeyup="searchUsers()"
-      placeholder="Search users..."
-      autocomplete="off"
-    />
+    <div class="search-container">
+      <input type="text" id="searchInput" onkeyup="searchUsers()" placeholder="Search users..." autocomplete="off"/>
+    </div>
     <ul id="results"></ul>
     <button id="logout-btn" onclick="logout()" style="margin-top: 20px; padding: 10px 15px; border:none; border-radius:6px; background:#ef4444; color:white; cursor:pointer; width: 100%;">Logout</button>
   </div>
@@ -240,7 +242,9 @@
     <div id="chat-header">
       <span id="chat-title">Chat</span>
       <button id="call-btn" onclick="startCall()" title="Video Call">
-        <svg width="28" height="28" fill="#38bdf8" viewBox="0 0 24 24"><path d="M17 10.5V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3.5l4 4v-11l-4 4z"/></svg>
+      <svg width="28" height="28" fill="#38bdf8" viewBox="0 0 24 24">
+      <path d="M17 10.5V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3.5l4 4v-11l-4 4z" />
+      </svg>
       </button>
     </div>
     <ul id="messages"></ul>
@@ -249,11 +253,6 @@
         <input id="msg_input" autocomplete="off" onkeydown="if(event.key === 'Enter') sendMessage();" />
         <button type="submit">Send</button>
       </form>
-    </div>
-    <div id="video-call" style="display:none; flex-direction:column; align-items:center;">
-      <video id="localVideo" autoplay muted playsinline style="width:200px; border-radius:8px; background:#222;"></video>
-      <video id="remoteVideo" autoplay playsinline style="width:200px; border-radius:8px; background:#222; margin-top:10px;"></video>
-      <button onclick="endCall()" style="margin-top:10px; background:#ef4444;">End Call</button>
     </div>
   </div>
   <script>
@@ -394,43 +393,7 @@
     function logout() {
       window.location.href = "/logout";
     }
-
-    function startCall() {
-      if (!targetUser) return alert("Select a user to call!");
-      if (!navigator.mediaDevices) return alert("Browser doesn't support video call");
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
-        localStream = stream;
-        document.getElementById('localVideo').srcObject = stream;
-        document.getElementById('video-call').style.display = 'flex';
-        peerConnection = new RTCPeerConnection(config);
-        stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
-        peerConnection.onicecandidate = ({candidate}) => {
-          if (candidate) socket.emit('webrtc_ice', {candidate, to: targetUser, from: username});
-        };
-        peerConnection.ontrack = ({streams: [remoteStream]}) => {
-          document.getElementById('remoteVideo').srcObject = remoteStream;
-        };
-        peerConnection.createOffer().then(offer => {
-          peerConnection.setLocalDescription(offer);
-          // Sending the offer
-          socket.emit("video-call-offer", { recipient_id: targetUser, offer: offer });
-        });
-      });
-    }
-
-    // Receiving the offer
-    socket.on("video-call-offer", (data) => {
-      console.log("Received video call offer:", data);
-    });
-
-    function endCall() {
-      if (peerConnection) peerConnection.close();
-      if (localStream) localStream.getTracks().forEach(track => track.stop());
-      document.getElementById('video-call').style.display = 'none';
-      document.getElementById('remoteVideo').srcObject = null;
-      document.getElementById('localVideo').srcObject = null;
-      socket.emit('webrtc_end', {to: targetUser, from: username});
-    }
+      
 
     function insertDayDivider(dateStr) {
       const divider = document.createElement('li');
