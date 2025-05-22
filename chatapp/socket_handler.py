@@ -95,3 +95,64 @@ def handle_private_message(data):
         'content': message,
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     }, room=room)
+
+# ----- Video Call Events -----
+
+@sio.on('call_user')
+def handle_call_user(data):
+    room = data.get('room')
+    caller = data.get('caller')
+    callee = data.get('callee')
+    
+    if not all([room, caller, callee]):
+        return emit('error', {'error': 'Missing call information'})
+    
+    emit('incoming_call', {
+        'caller': caller,
+        'room': room
+    }, room=room)
+
+@sio.on('call_accepted')
+def handle_call_accepted(data):
+    room = data.get('room')
+    if room:
+        emit('call_accepted', room=room)
+
+@sio.on('call_rejected')
+def handle_call_rejected(data):
+    room = data.get('room')
+    if room:
+        emit('call_rejected', room=room)
+
+@sio.on('ice_candidate')
+def handle_ice_candidate(data):
+    room = data.get('room')
+    candidate = data.get('candidate')
+    if room and candidate:
+        emit('ice_candidate', {
+            'candidate': candidate
+        }, room=room)
+
+@sio.on('offer')
+def handle_offer(data):
+    room = data.get('room')
+    offer = data.get('offer')
+    if room and offer:
+        emit('offer', {
+            'offer': offer
+        }, room=room)
+
+@sio.on('answer')
+def handle_answer(data):
+    room = data.get('room')
+    answer = data.get('answer')
+    if room and answer:
+        emit('answer', {
+            'answer': answer
+        }, room=room)
+
+@sio.on('end_call')
+def handle_end_call(data):
+    room = data.get('room')
+    if room:
+        emit('call_ended', room=room)
